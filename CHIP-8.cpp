@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <iostream>
 #include <fstream>
+#include <array>
 #pragma warning(disable:4996)
 
 // Documentation specifies that memory ranges from 0x000 -> 0x1FF, so negative values are not
@@ -18,9 +19,9 @@ typedef unsigned char BYTE;
 typedef unsigned short int WORD;
 
 // Memory, registers, and all that good stuff.
-BYTE m_GameMemory[0xFFF];
-BYTE m_Registers[16];
-BYTE m_Keyboard[16];
+std::array<BYTE, 0xFFF> m_GameMemory;
+std::array<BYTE, 16> m_Registers;
+std::array<BYTE, 16> m_Keyboard;
 WORD m_AddressI;
 WORD m_PC;
 std::vector<WORD> m_Stack;
@@ -30,9 +31,15 @@ uint8_t delayTimer;
 uint8_t soundTimer;
 
 // Screen dimensions and data
-const unsigned int SCREEN_WIDTH = 64;
-const unsigned int SCREEN_HEIGHT = 32;
+const unsigned int SCALE = 25;
+const unsigned int SCREEN_WIDTH = 64 * SCALE;
+const unsigned int SCREEN_HEIGHT = 32 * SCALE;
+
+// Using normal C-arrays for now. Getting a memory address to an element in an
+// std::array is difficult.
 BYTE m_ScreenData[SCREEN_WIDTH][SCREEN_HEIGHT];
+
+//std::array<std::array<BYTE, SCREEN_HEIGHT>, SCREEN_WIDTH> m_ScreenData;
 
 // Font data
 const unsigned int numOfSprites = 16;
@@ -95,7 +102,7 @@ bool LoadCH8ROM(const char* fname) {
 
     // Get length of ROM file
     ROM.seekg(0, std::ios::end);
-    long long bufferSize = ROM.tellg();
+    long bufferSize = ROM.tellg();
     ROM.seekg(0, std::ios::beg);
     //printf("Size of ROM file: %d\n", (int)bufferSize);
 
@@ -166,6 +173,7 @@ WORD GetNextOpcode() {
 void Opcode00E0(WORD opcode) {
     
     // Set every pixel to 0.
+    //std::fill(&m_ScreenData[0], &m_ScreenData[0] + SCREEN_WIDTH * SCREEN_HEIGHT, 0);
     std::fill(m_ScreenData[0], m_ScreenData[0] + SCREEN_WIDTH * SCREEN_HEIGHT, 0);
 }
 
@@ -342,8 +350,9 @@ void OpcodeCXNN(WORD opcode) {
     m_Registers[GetRegisterX(opcode)] = rand() & nn;
 }
 
-// Draw sprite at coord (VX, VY) with width of 8 pixels and N pixels.
+// Draw sprite at coord (VX, VY) with width of 8 pixels and N bytes.
 // Set VF to 01 if any set pixels are changed to unset, and 00 otherwise
+// Carry flags are determined in function DrawPixels.
 void OpcodeDXYN(WORD opcode) {
 
     // Get the height of an arbitrary sprite
@@ -352,10 +361,10 @@ void OpcodeDXYN(WORD opcode) {
     int height = opcode & 0x000F;
 
     // Coords start at top left of the screen
+    // These will the locations of the sprite drawn on
+    // screen
     int coordx = m_Registers[GetRegisterX(opcode)];
     int coordy = m_Registers[GetRegisterY(opcode)];
-
-    m_Registers[0xF] = 0;
 
     // Loop for each vertical line
     for (int yline = 0; yline < height;  yline++) {
@@ -365,20 +374,26 @@ void OpcodeDXYN(WORD opcode) {
 
         // Each byte is one line of the sprite. Each pixel determines
         // whether it is on or off.
+        // xpixelinv is the xpixel reversed. Sprite data is encoded weird.
+        // For instance, pixel 0 = bit 7; pixel 1 = bit 6... pixel 7 = bit 0.
+        // When iterating through the pixels in the later lines, 
+        // xpixelinv will decrement while xpixel will increment. This will be 
+        // the method for traversing through the sprite data.
         int xpixelinv = 7;
         int xpixel = 0;
 
-        // Iterate through the pixels.
+        // Iterate through the sprite data.
         for (xpixel = 0; xpixel < 8; xpixel++, xpixelinv--) {
+
             int mask = 1 << xpixelinv;
 
             // Determine if xpixelinv is 0 or 1 by checking the data and mask.
+            // If xpixelinv is 1, toggle the pixel state, else ignore.
             if (data & mask) {
+
+                // Get the coords by adding registers VX/VY to width/height of pixel
                 int x = coordx + xpixel;
                 int y = coordy + yline;
-                if (m_ScreenData[x][y] == 1) {
-                    m_Registers[0xF] = 1;
-                }
 
                 // Toggle pixel state
                 m_ScreenData[x][y] ^= 1;
@@ -557,6 +572,7 @@ bool initSDL(SDL_Window* &window, SDL_Renderer* &renderer, SDL_Surface* &mainSur
 
         // More flags here: https://wiki.libsdl.org/SDL_WindowFlags
         SDL_CreateWindowAndRenderer(SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN, &window, &renderer);
+        SDL_SetWindowTitle(window, "CHIP-8 Interpreter by John Carlo Manuel");
 
         mainSurface = SDL_GetWindowSurface(window);
         if (!mainSurface) {
@@ -611,14 +627,13 @@ void DrawPixels(SDL_Renderer* &renderer, SDL_Texture* &gameScreen) {
     SDL_Rect tempRect;
     tempRect.x = 0;
     tempRect.y = 0;
-    tempRect.w = SCREEN_WIDTH;
-    tempRect.h = SCREEN_HEIGHT;
+    tempRect.w = SCREEN_WIDTH*SCALE;
+    tempRect.h = SCREEN_HEIGHT*SCALE;
     SDL_RenderCopy(renderer, gameScreen, NULL, &tempRect);
 }
 
 // The humble beginnings of a C++ program
-int main(int argc, char* argv[])
-{
+int main(int argc, char* argv[]) {
     std::string fname, path;
     std::cout << "Enter filename inside your ROMS folder without file extension: " << '\n';
     std::cin >> fname;
@@ -778,7 +793,7 @@ int main(int argc, char* argv[])
 
             // Update window
             SDL_RenderPresent(renderer);
-    }
+        }
     }
 
     // Free surface and text texture 
