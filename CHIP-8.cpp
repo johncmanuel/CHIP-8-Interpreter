@@ -559,7 +559,7 @@ void DecodeOpcodeCycle(WORD opcode) {
 // Graphics
 
 // Initialize SDL!
-bool initSDL(SDL_Window* &window, SDL_Renderer* &renderer, SDL_Surface* &mainSurface) {
+bool initSDL(SDL_Window* &window, SDL_Renderer* &renderer) {
 
     // Initialize video subsystem
     // Additional flags can be found here: https://wiki.libsdl.org/SDL_Init
@@ -573,12 +573,6 @@ bool initSDL(SDL_Window* &window, SDL_Renderer* &renderer, SDL_Surface* &mainSur
         // More flags here: https://wiki.libsdl.org/SDL_WindowFlags
         SDL_CreateWindowAndRenderer(SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN, &window, &renderer);
         SDL_SetWindowTitle(window, "CHIP-8 Interpreter by John Carlo Manuel");
-
-        mainSurface = SDL_GetWindowSurface(window);
-        if (!mainSurface) {
-            printf("Cannot make surface. See more: %s\n", SDL_GetError());
-        }
-
     }
     
     return true;
@@ -643,7 +637,6 @@ int main(int argc, char* argv[]) {
 
     // Important stuff
     SDL_Window* window;
-    SDL_Surface* mainSurface;
     SDL_Renderer* renderer;
     SDL_Texture* gameScreen = NULL;    
 
@@ -652,7 +645,7 @@ int main(int argc, char* argv[]) {
     bool exit = false;
 
     // Ensure that SDL works
-    if (initSDL(window, renderer, mainSurface)) {
+    if (initSDL(window, renderer)) {
 
         // Reset the registers, keys, and memory
         CPUReset();
@@ -797,7 +790,6 @@ int main(int argc, char* argv[]) {
     }
 
     // Free surface and text texture 
-    SDL_FreeSurface(mainSurface);
     SDL_DestroyTexture(gameScreen);
 
     // Close window and renderer
